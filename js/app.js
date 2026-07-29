@@ -25,8 +25,9 @@
     exifObj: null,      // piexif dump of the original JPEG (if any)
     metaEntries: [],    // rows shown in the accordion
     animated: false,    // GIF flattened notice
+    cropMode: false,    // manual cropping is opt-in; resize-for-forms is the default
     outBlob: null,      // last encoded output
-    outMime: 'image/png',
+    outMime: 'image/jpeg',
     syncing: false,     // guard against crop input feedback loops
     encodeToken: 0
   };
@@ -217,6 +218,10 @@
         responsive: true,
         checkOrientation: false,
         background: false,
+        ready: function () {
+          $('#modeBar').hidden = false;
+          setCropMode(state.cropMode); // apply the current Resize/Crop mode to the fresh cropper
+        },
         crop: debounce(function () {
           syncInputsFromCropper();
           scheduleEncode();
@@ -311,12 +316,50 @@
     return out;
   }
 
+  // Cut the canvas down to the target ratio, keeping the centre.
+  function centerTrim(src, ratio) {
+    var w = src.width, h = src.height, tw, th;
+    if (w / h > ratio) { th = h; tw = Math.max(1, Math.round(h * ratio)); }
+    else { tw = w; th = Math.max(1, Math.round(w / ratio)); }
+    var out = document.createElement('canvas');
+    out.width = tw; out.height = th;
+    var ctx = out.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, Math.round((tw - w) / 2), Math.round((th - h) / 2));
+    return out;
+  }
+
+  // Grow the canvas to the target ratio, filling the border with a colour.
+  function padTo(src, ratio, color) {
+    var w = src.width, h = src.height, tw, th;
+    if (w / h > ratio) { tw = w; th = Math.max(1, Math.round(w / ratio)); }
+    else { th = h; tw = Math.max(1, Math.round(h * ratio)); }
+    var out = document.createElement('canvas');
+    out.width = tw; out.height = th;
+    var ctx = out.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, tw, th);
+    ctx.drawImage(src, Math.round((tw - w) / 2), Math.round((th - h) / 2));
+    return out;
+  }
+
   // Crop stage → optional canvas-fit stage → optional exact resize. Returns the final canvas.
+  // When the staged image's shape differs from the exact target, the fit strategy
+  // (auto-trim centre / pad / stretch) decides how to reconcile them.
   function buildOutputCanvas(outMime) {
     var staged = buildFittedCanvas(outMime);
     if (!staged) return null;
     var ex = exactSize();
-    if (ex && (staged.width !== ex.w || staged.height !== ex.h)) return scaleCanvasTo(staged, ex.w, ex.h);
+    if (!ex) return staged;
+    var want = ex.w / ex.h;
+    if (Math.abs(staged.width / staged.height - want) > 0.002) {
+      var fit = $('#fitMode').value;
+      if (fit === 'auto') staged = centerTrim(staged, want);
+      else if (fit === 'pad') staged = padTo(staged, want, '#ffffff');
+      // 'stretch' falls through: the scale below distorts on purpose
+    }
+    if (staged.width !== ex.w || staged.height !== ex.h) staged = scaleCanvasTo(staged, ex.w, ex.h);
     return staged;
   }
 
@@ -874,6 +917,45 @@
     scheduleEncode();
   }
 
+  function selectWhole() {
+    if (!state.cropper) return;
+    var d = state.cropper.getImageData();
+    state.cropper.setData({ x: 0, y: 0, width: d.naturalWidth, height: d.naturalHeight });
+  }
+
+  // Resize-only (default) vs manual-crop mode. With crop off, the crop box is
+  // hidden and pinned to the whole image; the fit strategy handles the shape.
+  function setCropMode(on) {
+    state.cropMode = on;
+    $('#cropTick').checked = on;
+    $('#editorStage').classList.toggle('crop-off', !on);
+    $('#cropBody').classList.toggle('on', on);
+    $('#cropOffNote').hidden = on;
+    if (state.cropper) {
+      if (on) {
+        applyExactSize();
+      } else {
+        state.aspect = NaN;
+        state.cropper.setAspectRatio(NaN);
+        selectWhole();
+      }
+    }
+    scheduleEncode();
+  }
+
+  // Exact output size changed. In crop mode the crop box locks to the target
+  // ratio; in resize mode the fit strategy takes care of shape differences.
+  function applyExactSize() {
+    var ex = exactSize();
+    $('#exactNote').hidden = !$('#exactEnable').checked;
+    if (ex && state.cropMode) {
+      $$('#ratioGrid .ratio-btn').forEach(function (b) { b.classList.remove('active'); });
+      setAspect(ex.w / ex.h);
+    } else {
+      scheduleEncode();
+    }
+  }
+
   function bindUpload() {
     var dz = $('#dropzone');
     var input = $('#fileInput');
@@ -1012,11 +1094,7 @@
       $('#' + id).addEventListener('change', syncCropperFromInputs);
     });
 
-    $('#selectAllCrop').addEventListener('click', function () {
-      if (!state.cropper) return;
-      var d = state.cropper.getImageData();
-      state.cropper.setData({ x: 0, y: 0, width: d.naturalWidth, height: d.naturalHeight });
-    });
+    $('#selectAllCrop').addEventListener('click', selectWhole);
     $('#centerCrop').addEventListener('click', function () {
       if (!state.cropper) return;
       var img = state.cropper.getImageData();
@@ -1024,8 +1102,13 @@
       state.cropper.setData({ x: (img.naturalWidth - d.width) / 2, y: (img.naturalHeight - d.height) / 2, width: d.width, height: d.height });
     });
 
-    $('#rotL').addEventListener('click', function () { if (state.cropper) state.cropper.rotate(-90); });
-    $('#rotR').addEventListener('click', function () { if (state.cropper) state.cropper.rotate(90); });
+    function rotateBy(deg) {
+      if (!state.cropper) return;
+      state.cropper.rotate(deg);
+      if (!state.cropMode) selectWhole(); // keep the whole photo selected in resize mode
+    }
+    $('#rotL').addEventListener('click', function () { rotateBy(-90); });
+    $('#rotR').addEventListener('click', function () { rotateBy(90); });
     $('#flipH').addEventListener('click', function () { if (state.cropper) state.cropper.scaleX(-state.cropper.getData().scaleX || -1); });
     $('#flipV').addEventListener('click', function () { if (state.cropper) state.cropper.scaleY(-state.cropper.getData().scaleY || -1); });
     $('#zoomIn').addEventListener('click', function () { if (state.cropper) state.cropper.zoom(0.1); });
@@ -1087,18 +1170,11 @@
     });
     $('#targetKB').addEventListener('input', debounce(scheduleEncode, 300));
 
-    // Exact output size — lock the crop ratio to match so nothing distorts
-    function applyExactSize() {
-      var ex = exactSize();
-      $('#exactNote').hidden = !$('#exactEnable').checked;
-      if (ex) {
-        $$('#ratioGrid .ratio-btn').forEach(function (b) { b.classList.remove('active'); });
-        setAspect(ex.w / ex.h);
-      } else {
-        scheduleEncode();
-      }
-    }
-    $('#exactEnable').addEventListener('change', applyExactSize);
+    $('#exactEnable').addEventListener('change', function () {
+      $('#resizeTick').checked = this.checked;
+      $('#resizeFields').classList.toggle('disabled-block', !this.checked);
+      applyExactSize();
+    });
     $('#outWInput').addEventListener('input', debounce(applyExactSize, 300));
     $('#outHInput').addEventListener('input', debounce(applyExactSize, 300));
 
@@ -1124,6 +1200,43 @@
     });
   }
 
+  function bindModeBar() {
+    // Mode-bar fields mirror the export-card fields (single behavior, two places)
+    function mirror(srcId, dstId, after) {
+      $('#' + srcId).addEventListener('input', function () {
+        $('#' + dstId).value = this.value;
+        after();
+      });
+    }
+    var debExact = debounce(applyExactSize, 250);
+    var debEnc = debounce(scheduleEncode, 300);
+    mirror('mainW', 'outWInput', debExact);
+    mirror('outWInput', 'mainW', function () { /* applyExactSize already bound */ });
+    mirror('mainH', 'outHInput', debExact);
+    mirror('outHInput', 'mainH', function () { });
+    mirror('mainKB', 'targetKB', debEnc);
+    mirror('targetKB', 'mainKB', function () { });
+
+    $('#resizeTick').addEventListener('change', function () {
+      $('#exactEnable').checked = this.checked;
+      $('#resizeFields').classList.toggle('disabled-block', !this.checked);
+      applyExactSize();
+    });
+    $('#cropTick').addEventListener('change', function () { setCropMode(this.checked); });
+    $('#fitMode').addEventListener('change', scheduleEncode);
+
+    $$('#presetRow button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        $('#mainW').value = $('#outWInput').value = b.dataset.w;
+        $('#mainH').value = $('#outHInput').value = b.dataset.h;
+        $('#mainKB').value = $('#targetKB').value = b.dataset.kb;
+        $('#resizeTick').checked = $('#exactEnable').checked = true;
+        $('#resizeFields').classList.remove('disabled-block');
+        applyExactSize();
+      });
+    });
+  }
+
   function bindHistory() {
     $('#clearHistoryBtn').addEventListener('click', function () {
       if (!loadHistory().length) return;
@@ -1140,6 +1253,7 @@
   bindCrop();
   bindCanvas();
   bindExport();
+  bindModeBar();
   bindHistory();
   updateUnitEchoes();
   loadHistoryUI();
