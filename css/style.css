@@ -441,6 +441,11 @@ input[type="color"] {
   box-shadow: 0 4px 12px rgba(62, 207, 90, .35);
 }
 
+/* ---------------- Exact output size ---------------- */
+.exact-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.exact-row .check { padding: 0; white-space: nowrap; }
+.exact-row input[type="number"] { width: 84px; }
+
 /* ---------------- Quality slider ---------------- */
 .quality-block { margin-bottom: 4px; }
 .quality-row { display: flex; align-items: center; gap: 12px; }

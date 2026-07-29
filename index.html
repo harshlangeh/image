@@ -261,10 +261,21 @@
       <label class="seg-opt"><input type="radio" name="outFormat" value="image/webp"><span>WebP<br><small>modern</small></span></label>
     </div>
 
+    <label class="field-label">Exact output size <span class="muted">(exam / form uploads)</span></label>
+    <div class="exact-row">
+      <label class="check"><input type="checkbox" id="exactEnable"> Resize to</label>
+      <input type="number" id="outWInput" placeholder="W" min="1" inputmode="numeric" aria-label="Output width in pixels">
+      <span>×</span>
+      <input type="number" id="outHInput" placeholder="H" min="1" inputmode="numeric" aria-label="Output height in pixels">
+      <span>px</span>
+    </div>
+    <p class="muted" id="exactNote" hidden>Crop ratio is locked to match, so the photo never distorts — the final file is exactly this size.</p>
+
     <label class="field-label">Quality</label>
-    <div class="seg" role="radiogroup" aria-label="Quality mode">
+    <div class="seg seg-3" role="radiogroup" aria-label="Quality mode">
       <label class="seg-opt"><input type="radio" name="qualityMode" value="lossless" checked><span>💎 Maximum<br><small>no quality loss</small></span></label>
-      <label class="seg-opt"><input type="radio" name="qualityMode" value="compress"><span>🗜️ Compress<br><small>shrink file size</small></span></label>
+      <label class="seg-opt"><input type="radio" name="qualityMode" value="compress"><span>🗜️ Compress<br><small>quality slider</small></span></label>
+      <label class="seg-opt"><input type="radio" name="qualityMode" value="target"><span>🎯 Target size<br><small>fit under a limit</small></span></label>
     </div>
 
     <div id="qualityBlock" class="quality-block disabled-block">
@@ -276,6 +287,15 @@
         </div>
       </div>
       <p class="muted" id="qualityNote">Lower % = smaller file. PNG is always lossless — pick JPG or WebP to compress.</p>
+    </div>
+
+    <div id="targetBlock" class="quality-block disabled-block" hidden>
+      <div class="quality-row">
+        <span>Keep file under</span>
+        <input type="number" id="targetKB" value="50" min="1" max="51200" inputmode="numeric" aria-label="Target file size in kilobytes" style="width:90px">
+        <span>KB</span>
+      </div>
+      <p class="muted" id="targetNote">The best JPG/WebP quality that fits under the limit is found automatically.</p>
     </div>
 
     <div class="row">

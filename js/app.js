@@ -284,11 +284,46 @@
     return parseRatio(sel);
   }
 
-  // Crop stage → optional canvas-fit stage. Returns the final canvas.
+  function exactSize() {
+    if (!$('#exactEnable').checked) return null;
+    var w = parseInt($('#outWInput').value, 10);
+    var h = parseInt($('#outHInput').value, 10);
+    return (w > 0 && h > 0) ? { w: w, h: h } : null;
+  }
+
+  // Scale a canvas to exact dimensions (multi-step halving keeps downscales sharp)
+  function scaleCanvasTo(src, w, h) {
+    var cur = src;
+    while (cur.width / 2 >= w && cur.height / 2 >= h) {
+      var half = document.createElement('canvas');
+      half.width = Math.max(w, Math.round(cur.width / 2));
+      half.height = Math.max(h, Math.round(cur.height / 2));
+      var hctx = half.getContext('2d');
+      hctx.imageSmoothingQuality = 'high';
+      hctx.drawImage(cur, 0, 0, half.width, half.height);
+      cur = half;
+    }
+    var out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    var ctx = out.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(cur, 0, 0, w, h);
+    return out;
+  }
+
+  // Crop stage → optional canvas-fit stage → optional exact resize. Returns the final canvas.
   function buildOutputCanvas(outMime) {
+    var staged = buildFittedCanvas(outMime);
+    if (!staged) return null;
+    var ex = exactSize();
+    if (ex && (staged.width !== ex.w || staged.height !== ex.h)) return scaleCanvasTo(staged, ex.w, ex.h);
+    return staged;
+  }
+
+  function buildFittedCanvas(outMime) {
     if (!state.cropper) return null;
     var cropped = state.cropper.getCroppedCanvas({ imageSmoothingQuality: 'high' });
-    if (!cropped) return null;
+    if (!cropped || !cropped.width || !cropped.height) return null;
     if (!$('#canvasEnable').checked) return cropped;
 
     var ratio = canvasTargetRatio();
@@ -375,6 +410,26 @@
     return new Blob([arr], { type: mime });
   }
 
+  // Highest quality whose encoded size fits under targetBytes (binary search).
+  function encodeToTarget(canvas, mime, targetBytes) {
+    var lo = 0.02, hi = 1, best = null, bestQ = null;
+    function step(i) {
+      var q = (lo + hi) / 2;
+      return encodeCanvas(canvas, mime, q).then(function (blob) {
+        if (blob.size <= targetBytes) { best = blob; bestQ = q; lo = q; }
+        else hi = q;
+        return i >= 7 ? null : step(i + 1);
+      });
+    }
+    return step(0).then(function () {
+      if (best) return { blob: best, q: bestQ };
+      // even the lowest quality overshoots — return it so the user sees how far off it is
+      return encodeCanvas(canvas, mime, 0.02).then(function (blob) {
+        return { blob: blob, q: 0.02, over: true };
+      });
+    });
+  }
+
   var scheduleEncode = debounce(function () {
     if (!state.cropper || !state.source) return;
     var token = ++state.encodeToken;
@@ -387,7 +442,26 @@
     dlSize.classList.add('busy');
     dlSize.textContent = '…';
 
-    encodeCanvas(canvas, mime, quality).then(function (blob) {
+    var mode = document.querySelector('input[name="qualityMode"]:checked').value;
+    var targetKB = Math.max(1, parseInt($('#targetKB').value, 10) || 50);
+    var encoded;
+    if (mode === 'target' && mime !== 'image/png') {
+      encoded = encodeToTarget(canvas, mime, targetKB * 1024).then(function (r) {
+        if (token === state.encodeToken) {
+          $('#targetNote').textContent = r.over
+            ? '⚠️ Even the lowest quality is ' + formatBytes(r.blob.size) + ' — reduce the output dimensions to fit under ' + targetKB + ' KB.'
+            : '✅ ' + formatBytes(r.blob.size) + ' at quality ' + Math.round(r.q * 100) + '% — under the ' + targetKB + ' KB limit.';
+        }
+        return r.blob;
+      });
+    } else {
+      if (mode === 'target') {
+        $('#targetNote').textContent = 'PNG size can’t be targeted (it’s lossless) — switch the format to JPG or WebP.';
+      }
+      encoded = encodeCanvas(canvas, mime, quality);
+    }
+
+    encoded.then(function (blob) {
       if (token !== state.encodeToken) return; // superseded
       state.outBlob = blob;
       state.outMime = mime;
@@ -770,7 +844,12 @@
       origSize: state.fileSize,
       dims: $('#outDims').textContent,
       thumb: thumbnailDataUrl(),
-      quality: document.querySelector('input[name="qualityMode"]:checked').value === 'lossless' ? 'max' : $('#qualityInput').value + '%'
+      quality: (function () {
+        var mode = document.querySelector('input[name="qualityMode"]:checked').value;
+        if (mode === 'lossless') return 'max';
+        if (mode === 'target') return '≤' + ($('#targetKB').value || 50) + 'KB';
+        return $('#qualityInput').value + '%';
+      })()
     };
     // keep the actual file re-downloadable when it's small enough for localStorage
     if (state.outBlob.size < 250 * 1024) {
@@ -996,12 +1075,32 @@
         scheduleEncode();
       });
     });
+    function refreshQualityBlocks() {
+      var mode = document.querySelector('input[name="qualityMode"]:checked').value;
+      $('#qualityBlock').hidden = mode === 'target';
+      $('#qualityBlock').classList.toggle('on', mode === 'compress');
+      $('#targetBlock').hidden = mode !== 'target';
+      $('#targetBlock').classList.toggle('on', mode === 'target');
+    }
     $$('input[name="qualityMode"]').forEach(function (r) {
-      r.addEventListener('change', function () {
-        $('#qualityBlock').classList.toggle('on', r.value === 'compress' && r.checked);
-        scheduleEncode();
-      });
+      r.addEventListener('change', function () { refreshQualityBlocks(); scheduleEncode(); });
     });
+    $('#targetKB').addEventListener('input', debounce(scheduleEncode, 300));
+
+    // Exact output size — lock the crop ratio to match so nothing distorts
+    function applyExactSize() {
+      var ex = exactSize();
+      $('#exactNote').hidden = !$('#exactEnable').checked;
+      if (ex) {
+        $$('#ratioGrid .ratio-btn').forEach(function (b) { b.classList.remove('active'); });
+        setAspect(ex.w / ex.h);
+      } else {
+        scheduleEncode();
+      }
+    }
+    $('#exactEnable').addEventListener('change', applyExactSize);
+    $('#outWInput').addEventListener('input', debounce(applyExactSize, 300));
+    $('#outHInput').addEventListener('input', debounce(applyExactSize, 300));
 
     var slider = $('#qualitySlider');
     var num = $('#qualityInput');
