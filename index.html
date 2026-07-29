@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixora Studio — Crop · Resize · Compress</title>
+<meta name="description" content="Pixora Studio — a beautiful, private, in-browser image studio. Crop to any aspect ratio in px/%/in/cm/mm, resize the canvas, compress with a live size preview, edit metadata and download as PNG or JPG. Supports HEIC, GIF, SVG and more.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff7ab8'/%3E%3Cstop offset='.5' stop-color='%2366c2ff'/%3E%3Cstop offset='1' stop-color='%2360e07f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='56' height='56' rx='16' fill='url(%23g)'/%3E%3Cpath d='M20 40l8-10 6 7 4-5 6 8H20z' fill='white'/%3E%3Ccircle cx='24' cy='23' r='4' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/cropper.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Full-window drag overlay -->
+<div id="dropOverlay" class="drop-overlay" hidden>
+  <div class="drop-overlay-inner">
+    <div class="drop-overlay-icon">⬇️</div>
+    <h2>Drop your image anywhere</h2>
+    <p>JPG · PNG · WebP · HEIC · GIF · SVG · TIFF · BMP · AVIF</p>
+  </div>
+</div>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-logo" aria-hidden="true">
+      <svg viewBox="0 0 64 64" width="34" height="34"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7ab8"/><stop offset=".5" stop-color="#66c2ff"/><stop offset="1" stop-color="#60e07f"/></linearGradient></defs><rect x="4" y="4" width="56" height="56" rx="16" fill="url(#lg)"/><path d="M20 40l8-10 6 7 4-5 6 8H20z" fill="#fff"/><circle cx="24" cy="23" r="4" fill="#fff"/></svg>
+    </span>
+    <span class="brand-name">Pixora <em>Studio</em></span>
+  </div>
+  <nav class="header-actions">
+    <span class="privacy-pill" title="All processing happens locally in your browser — nothing is uploaded to a server.">🔒 100% in-browser · nothing uploaded</span>
+    <button id="newImageBtn" class="btn btn-ghost" type="button">＋ New image</button>
+  </nav>
+</header>
+
+<main class="bento" id="bento">
+
+  <!-- ============ 1. UPLOAD (pink) ============ -->
+  <section class="card card-pink area-upload" id="uploadCard">
+    <div class="card-head">
+      <h2><span class="card-emoji">📥</span> Upload</h2>
+      <span class="chip" id="srcFormatChip" hidden></span>
+    </div>
+
+    <div id="dropzone" class="dropzone" tabindex="0" role="button"
+         aria-label="Upload an image: click, drag and drop, or paste with Ctrl+V">
+      <div class="dz-art" aria-hidden="true">
+        <svg viewBox="0 0 96 96" width="72" height="72"><rect x="10" y="18" width="76" height="60" rx="12" fill="#fff" stroke="#f472b6" stroke-width="3"/><path d="M24 62l14-16 10 12 8-9 12 13H24z" fill="#fbcfe8"/><circle cx="33" cy="35" r="6" fill="#f9a8d4"/><path d="M48 8v18M40 16l8-8 8 8" stroke="#ec4899" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <p class="dz-title">Drag &amp; drop, click to browse,<br>or paste with <kbd>Ctrl</kbd>+<kbd>V</kbd></p>
+      <p class="dz-sub">JPG · PNG · WebP · <strong>HEIC (iPhone)</strong> · GIF · SVG · TIFF · BMP · AVIF</p>
+      <div class="dz-buttons">
+        <button class="btn btn-primary" type="button" id="browseBtn">Browse files</button>
+        <button class="btn btn-soft" type="button" id="pasteBtn" title="Read image from clipboard">📋 Paste</button>
+        <button class="btn btn-soft" type="button" id="urlBtn" title="Load an image from a URL">🔗 From URL</button>
+      </div>
+      <input type="file" id="fileInput" accept="image/*,.heic,.heif,.avif,.svg" hidden>
+    </div>
+
+    <div class="upload-ways">
+      <span class="way">🖱️ Drag &amp; drop</span>
+      <span class="way">📋 Ctrl+C → Ctrl+V</span>
+      <span class="way">📁 File picker</span>
+      <span class="way">🔗 URL</span>
+      <span class="way">⌨️ Ctrl+O</span>
+    </div>
+    <div id="decodeStatus" class="decode-status" hidden></div>
+  </section>
+
+  <!-- ============ 2. EDITOR / PREVIEW (large) ============ -->
+  <section class="card card-editor area-editor" id="editorCard">
+    <div class="card-head">
+      <h2><span class="card-emoji">🖼️</span> Editor</h2>
+      <div class="editor-toolbar" id="editorToolbar">
+        <button class="tool" id="rotL" title="Rotate 90° counter-clockwise" type="button">⟲</button>
+        <button class="tool" id="rotR" title="Rotate 90° clockwise" type="button">⟳</button>
+        <button class="tool" id="flipH" title="Flip horizontally" type="button">⇋</button>
+        <button class="tool" id="flipV" title="Flip vertically" type="button">⥮</button>
+        <span class="tool-sep"></span>
+        <button class="tool" id="zoomIn" title="Zoom in" type="button">＋</button>
+        <button class="tool" id="zoomOut" title="Zoom out" type="button">－</button>
+        <span class="tool-sep"></span>
+        <button class="tool" id="resetCrop" title="Reset crop &amp; transforms" type="button">↺ Reset</button>
+      </div>
+    </div>
+    <div class="editor-stage" id="editorStage">
+      <div class="editor-empty" id="editorEmpty">
+        <p>✨ Your image will appear here</p>
+        <p class="muted">Upload something to start cropping</p>
+      </div>
+      <div class="cropper-wrap" id="cropperWrap" hidden>
+        <img id="cropperImage" alt="Image being edited">
+      </div>
+    </div>
+    <div class="editor-statusbar" id="editorStatus" hidden>
+      <span id="stDims">—</span>
+      <span id="stCrop">—</span>
+      <span id="stNote" class="muted"></span>
+    </div>
+  </section>
+
+  <!-- ============ 3. CROP & ASPECT (sky blue) ============ -->
+  <section class="card card-blue area-crop" id="cropCard">
+    <div class="card-head"><h2><span class="card-emoji">✂️</span> Crop &amp; Aspect ratio</h2></div>
+
+    <label class="field-label">Aspect ratio presets</label>
+    <div class="ratio-grid" id="ratioGrid">
+      <button class="ratio-btn active" data-ratio="free" type="button">Free</button>
+      <button class="ratio-btn" data-ratio="1:1" type="button">1:1</button>
+      <button class="ratio-btn" data-ratio="4:5" type="button">4:5</button>
+      <button class="ratio-btn" data-ratio="3:4" type="button">3:4</button>
+      <button class="ratio-btn" data-ratio="4:3" type="button">4:3</button>
+      <button class="ratio-btn" data-ratio="3:2" type="button">3:2</button>
+      <button class="ratio-btn" data-ratio="16:9" type="button">16:9</button>
+      <button class="ratio-btn" data-ratio="9:16" type="button">9:16</button>
+      <button class="ratio-btn" data-ratio="21:9" type="button">21:9</button>
+      <button class="ratio-btn" data-ratio="2:3" type="button">2:3</button>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label class="field-label" for="customRatioW">Custom ratio</label>
+        <div class="ratio-custom">
+          <input type="number" id="customRatioW" min="0.01" step="any" placeholder="W" inputmode="decimal">
+          <span>:</span>
+          <input type="number" id="customRatioH" min="0.01" step="any" placeholder="H" inputmode="decimal">
+          <button class="btn btn-soft btn-sm" id="applyCustomRatio" type="button">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <hr class="soft-hr">
+
+    <div class="row">
+      <div class="field">
+        <label class="field-label" for="unitSelect">Units</label>
+        <select id="unitSelect">
+          <option value="px" selected>Pixels (px)</option>
+          <option value="%">Percent (%)</option>
+          <option value="in">Inches (in)</option>
+          <option value="cm">Centimetres (cm)</option>
+          <option value="mm">Millimetres (mm)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="dpiInput">DPI <span class="muted">(for in/cm/mm)</span></label>
+        <input type="number" id="dpiInput" value="96" min="1" max="2400" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label class="field-label" for="cropW">Width <span class="unit-echo">px</span></label>
+        <input type="number" id="cropW" step="any" min="0" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label class="field-label" for="cropH">Height <span class="unit-echo">px</span></label>
+        <input type="number" id="cropH" step="any" min="0" inputmode="decimal">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label class="field-label" for="cropX">Offset X <span class="unit-echo">px</span></label>
+        <input type="number" id="cropX" step="any" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label class="field-label" for="cropY">Offset Y <span class="unit-echo">px</span></label>
+        <input type="number" id="cropY" step="any" inputmode="decimal">
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn btn-soft btn-sm" id="selectAllCrop" type="button">Select whole image</button>
+      <button class="btn btn-soft btn-sm" id="centerCrop" type="button">Center selection</button>
+    </div>
+  </section>
+
+  <!-- ============ 4. CANVAS SIZE (parrot green) ============ -->
+  <section class="card card-green area-canvas" id="canvasCard">
+    <div class="card-head">
+      <h2><span class="card-emoji">🎨</span> Canvas size</h2>
+      <label class="switch" title="Enable canvas resizing">
+        <input type="checkbox" id="canvasEnable">
+        <span class="slider-sw"></span>
+      </label>
+    </div>
+    <p class="card-hint">Grow or shrink the canvas so the final image matches a target aspect ratio — without distorting your photo.</p>
+
+    <div id="canvasControls" class="disabled-block">
+      <div class="row">
+        <div class="field">
+          <label class="field-label" for="canvasRatio">Target aspect ratio</label>
+          <select id="canvasRatio">
+            <option value="1:1">1:1 — Square</option>
+            <option value="4:5">4:5 — Portrait post</option>
+            <option value="3:4">3:4</option>
+            <option value="4:3">4:3</option>
+            <option value="3:2">3:2</option>
+            <option value="16:9" selected>16:9 — Widescreen</option>
+            <option value="9:16">9:16 — Story / Reel</option>
+            <option value="21:9">21:9 — Cinematic</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="field" id="canvasCustomWrap" hidden>
+          <label class="field-label">Custom ratio</label>
+          <div class="ratio-custom">
+            <input type="number" id="canvasRatioW" min="0.01" step="any" placeholder="W" inputmode="decimal">
+            <span>:</span>
+            <input type="number" id="canvasRatioH" min="0.01" step="any" placeholder="H" inputmode="decimal">
+          </div>
+        </div>
+      </div>
+
+      <label class="field-label">Mode</label>
+      <div class="seg" role="radiogroup" aria-label="Canvas mode">
+        <label class="seg-opt"><input type="radio" name="canvasMode" value="extend" checked><span>➕ Extend<br><small>add space around</small></span></label>
+        <label class="seg-opt"><input type="radio" name="canvasMode" value="trim"><span>➖ Trim<br><small>cut to fit ratio</small></span></label>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label class="field-label" for="canvasBg">Background (when extending)</label>
+          <select id="canvasBg">
+            <option value="transparent" selected>Transparent (PNG/WebP)</option>
+            <option value="#ffffff">White</option>
+            <option value="#000000">Black</option>
+            <option value="blur">Blurred image fill ✨</option>
+            <option value="custom">Custom colour…</option>
+          </select>
+        </div>
+        <div class="field" id="canvasBgColorWrap" hidden>
+          <label class="field-label" for="canvasBgColor">Colour</label>
+          <input type="color" id="canvasBgColor" value="#fbcfe8">
+        </div>
+      </div>
+
+      <label class="field-label">Image position on canvas</label>
+      <div class="align-grid" id="alignGrid" role="radiogroup" aria-label="Alignment">
+        <button data-al="nw" type="button" title="Top left">↖</button>
+        <button data-al="n"  type="button" title="Top">↑</button>
+        <button data-al="ne" type="button" title="Top right">↗</button>
+        <button data-al="w"  type="button" title="Left">←</button>
+        <button data-al="c"  type="button" class="active" title="Center">●</button>
+        <button data-al="e"  type="button" title="Right">→</button>
+        <button data-al="sw" type="button" title="Bottom left">↙</button>
+        <button data-al="s"  type="button" title="Bottom">↓</button>
+        <button data-al="se" type="button" title="Bottom right">↘</button>
+      </div>
+      <p class="muted" id="canvasResultNote"></p>
+    </div>
+  </section>
+
+  <!-- ============ 5. COMPRESS & DOWNLOAD (pink→blue) ============ -->
+  <section class="card card-sunset area-export" id="exportCard">
+    <div class="card-head"><h2><span class="card-emoji">🗜️</span> Compress &amp; Download</h2></div>
+
+    <label class="field-label">Output format</label>
+    <div class="seg seg-3" role="radiogroup" aria-label="Output format">
+      <label class="seg-opt"><input type="radio" name="outFormat" value="image/png" checked><span>PNG<br><small>lossless</small></span></label>
+      <label class="seg-opt"><input type="radio" name="outFormat" value="image/jpeg"><span>JPG<br><small>small files</small></span></label>
+      <label class="seg-opt"><input type="radio" name="outFormat" value="image/webp"><span>WebP<br><small>modern</small></span></label>
+    </div>
+
+    <label class="field-label">Quality</label>
+    <div class="seg" role="radiogroup" aria-label="Quality mode">
+      <label class="seg-opt"><input type="radio" name="qualityMode" value="lossless" checked><span>💎 Maximum<br><small>no quality loss</small></span></label>
+      <label class="seg-opt"><input type="radio" name="qualityMode" value="compress"><span>🗜️ Compress<br><small>shrink file size</small></span></label>
+    </div>
+
+    <div id="qualityBlock" class="quality-block disabled-block">
+      <div class="quality-row">
+        <input type="range" id="qualitySlider" min="1" max="100" value="80" aria-label="Compression quality">
+        <div class="quality-num">
+          <input type="number" id="qualityInput" min="1" max="100" value="80" inputmode="numeric">
+          <span>%</span>
+        </div>
+      </div>
+      <p class="muted" id="qualityNote">Lower % = smaller file. PNG is always lossless — pick JPG or WebP to compress.</p>
+    </div>
+
+    <div class="row">
+      <div class="field grow">
+        <label class="field-label" for="fileNameInput">File name</label>
+        <input type="text" id="fileNameInput" placeholder="my-image" spellcheck="false">
+      </div>
+      <div class="field">
+        <label class="field-label" for="keepMeta">Metadata</label>
+        <label class="check"><input type="checkbox" id="keepMeta" checked> Keep in JPG</label>
+      </div>
+    </div>
+
+    <div class="size-compare" id="sizeCompare" hidden>
+      <div><span class="muted">Original</span><strong id="szOrig">—</strong></div>
+      <div class="size-arrow" id="szArrow">→</div>
+      <div><span class="muted">Output</span><strong id="szOut">—</strong></div>
+      <div class="size-badge" id="szBadge">—</div>
+    </div>
+
+    <div class="out-preview-wrap" id="outPreviewWrap" hidden>
+      <img id="outPreview" alt="Output preview" class="checker">
+      <span class="chip chip-dark" id="outDims"></span>
+    </div>
+
+    <button class="btn btn-download" id="downloadBtn" type="button" disabled>
+      <span class="dl-icon">⬇️</span>
+      <span class="dl-main" id="dlLabel">Download</span>
+      <span class="dl-size" id="dlSize">—</span>
+    </button>
+  </section>
+
+  <!-- ============ 6. METADATA (blue) ============ -->
+  <section class="card card-blue area-meta" id="metaCard">
+    <div class="card-head">
+      <h2><span class="card-emoji">🏷️</span> Metadata (EXIF)</h2>
+      <button class="btn btn-soft btn-sm" id="stripMetaBtn" type="button" title="Clear every metadata field">🧹 Strip all</button>
+    </div>
+    <p class="card-hint">Every tag found in your image — expand a section and edit any value. Edits are embedded when you download as JPG.</p>
+    <div id="metaAccordion" class="meta-accordion">
+      <p class="muted meta-empty">Upload an image to inspect its metadata.</p>
+    </div>
+  </section>
+
+  <!-- ============ 7. HISTORY (green) ============ -->
+  <section class="card card-green area-history" id="historyCard">
+    <div class="card-head">
+      <h2><span class="card-emoji">🕘</span> History</h2>
+      <button class="btn btn-soft btn-sm" id="clearHistoryBtn" type="button">Clear</button>
+    </div>
+    <p class="card-hint">Saved locally in your browser — never uploaded.</p>
+    <div id="historyList" class="history-list">
+      <p class="muted">Your exported images will show up here.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="app-footer">
+  <p>Pixora Studio · Crop, resize &amp; compress images privately in your browser · HEIC, GIF, SVG &amp; more → PNG / JPG / WebP</p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="vendor/cropper.min.js"></script>
+<script src="vendor/heic2any.min.js"></script>
+<script src="vendor/piexif.js"></script>
+<script src="vendor/exifr.umd.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
