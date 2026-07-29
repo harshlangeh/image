@@ -92,6 +92,40 @@
         <img id="cropperImage" alt="Image being edited">
       </div>
     </div>
+    <div class="mode-bar" id="modeBar" hidden>
+      <div class="mode-ticks">
+        <label class="mode-tick" title="Scale the whole photo to an exact size — ideal for exam and form uploads">
+          <input type="checkbox" id="resizeTick" checked>
+          <span>📏 Resize <small>for exams &amp; forms</small></span>
+        </label>
+        <label class="mode-tick" title="Manually select an area of the photo to keep">
+          <input type="checkbox" id="cropTick">
+          <span>✂️ Crop <small>manual selection</small></span>
+        </label>
+      </div>
+      <div class="mode-fields" id="resizeFields">
+        <div class="mode-field-row">
+          <input type="number" id="mainW" value="120" min="1" inputmode="numeric" aria-label="Output width in pixels">
+          <span>×</span>
+          <input type="number" id="mainH" value="150" min="1" inputmode="numeric" aria-label="Output height in pixels">
+          <span>px&nbsp;·&nbsp;under</span>
+          <input type="number" id="mainKB" value="50" min="1" inputmode="numeric" aria-label="Maximum file size in kilobytes">
+          <span>KB</span>
+          <select id="fitMode" aria-label="How to fit the photo when its shape differs from the target size">
+            <option value="auto" selected>Auto-trim centre</option>
+            <option value="pad">Pad with white</option>
+            <option value="stretch">Stretch</option>
+          </select>
+        </div>
+        <div class="preset-row" id="presetRow">
+          <span class="muted">Presets:</span>
+          <button type="button" data-w="120" data-h="150" data-kb="50">Photo 120×150</button>
+          <button type="button" data-w="200" data-h="230" data-kb="50">Photo 200×230</button>
+          <button type="button" data-w="350" data-h="450" data-kb="100">Photo 350×450</button>
+          <button type="button" data-w="140" data-h="60" data-kb="30">Signature 140×60</button>
+        </div>
+      </div>
+    </div>
     <div class="editor-statusbar" id="editorStatus" hidden>
       <span id="stDims">—</span>
       <span id="stCrop">—</span>
@@ -102,7 +136,9 @@
   <!-- ============ 3. CROP & ASPECT (sky blue) ============ -->
   <section class="card card-blue area-crop" id="cropCard">
     <div class="card-head"><h2><span class="card-emoji">✂️</span> Crop &amp; Aspect ratio</h2></div>
+    <p class="card-hint" id="cropOffNote">Cropping is off — tick <strong>✂️ Crop</strong> under the image to select an area manually. Resize mode auto-trims for you.</p>
 
+    <div id="cropBody" class="disabled-block">
     <label class="field-label">Aspect ratio presets</label>
     <div class="ratio-grid" id="ratioGrid">
       <button class="ratio-btn active" data-ratio="free" type="button">Free</button>
@@ -171,6 +207,7 @@
     <div class="row">
       <button class="btn btn-soft btn-sm" id="selectAllCrop" type="button">Select whole image</button>
       <button class="btn btn-soft btn-sm" id="centerCrop" type="button">Center selection</button>
+    </div>
     </div>
   </section>
 
@@ -256,29 +293,29 @@
 
     <label class="field-label">Output format</label>
     <div class="seg seg-3" role="radiogroup" aria-label="Output format">
-      <label class="seg-opt"><input type="radio" name="outFormat" value="image/png" checked><span>PNG<br><small>lossless</small></span></label>
-      <label class="seg-opt"><input type="radio" name="outFormat" value="image/jpeg"><span>JPG<br><small>small files</small></span></label>
+      <label class="seg-opt"><input type="radio" name="outFormat" value="image/png"><span>PNG<br><small>lossless</small></span></label>
+      <label class="seg-opt"><input type="radio" name="outFormat" value="image/jpeg" checked><span>JPG<br><small>small files</small></span></label>
       <label class="seg-opt"><input type="radio" name="outFormat" value="image/webp"><span>WebP<br><small>modern</small></span></label>
     </div>
 
     <label class="field-label">Exact output size <span class="muted">(exam / form uploads)</span></label>
     <div class="exact-row">
-      <label class="check"><input type="checkbox" id="exactEnable"> Resize to</label>
-      <input type="number" id="outWInput" placeholder="W" min="1" inputmode="numeric" aria-label="Output width in pixels">
+      <label class="check"><input type="checkbox" id="exactEnable" checked> Resize to</label>
+      <input type="number" id="outWInput" placeholder="W" min="1" value="120" inputmode="numeric" aria-label="Output width in pixels">
       <span>×</span>
-      <input type="number" id="outHInput" placeholder="H" min="1" inputmode="numeric" aria-label="Output height in pixels">
+      <input type="number" id="outHInput" placeholder="H" min="1" value="150" inputmode="numeric" aria-label="Output height in pixels">
       <span>px</span>
     </div>
-    <p class="muted" id="exactNote" hidden>Crop ratio is locked to match, so the photo never distorts — the final file is exactly this size.</p>
+    <p class="muted" id="exactNote">The final file is exactly this size — the photo is fitted without distortion.</p>
 
     <label class="field-label">Quality</label>
     <div class="seg seg-3" role="radiogroup" aria-label="Quality mode">
-      <label class="seg-opt"><input type="radio" name="qualityMode" value="lossless" checked><span>💎 Maximum<br><small>no quality loss</small></span></label>
+      <label class="seg-opt"><input type="radio" name="qualityMode" value="lossless"><span>💎 Maximum<br><small>no quality loss</small></span></label>
       <label class="seg-opt"><input type="radio" name="qualityMode" value="compress"><span>🗜️ Compress<br><small>quality slider</small></span></label>
-      <label class="seg-opt"><input type="radio" name="qualityMode" value="target"><span>🎯 Target size<br><small>fit under a limit</small></span></label>
+      <label class="seg-opt"><input type="radio" name="qualityMode" value="target" checked><span>🎯 Target size<br><small>fit under a limit</small></span></label>
     </div>
 
-    <div id="qualityBlock" class="quality-block disabled-block">
+    <div id="qualityBlock" class="quality-block disabled-block" hidden>
       <div class="quality-row">
         <input type="range" id="qualitySlider" min="1" max="100" value="80" aria-label="Compression quality">
         <div class="quality-num">
@@ -289,7 +326,7 @@
       <p class="muted" id="qualityNote">Lower % = smaller file. PNG is always lossless — pick JPG or WebP to compress.</p>
     </div>
 
-    <div id="targetBlock" class="quality-block disabled-block" hidden>
+    <div id="targetBlock" class="quality-block disabled-block on">
       <div class="quality-row">
         <span>Keep file under</span>
         <input type="number" id="targetKB" value="50" min="1" max="51200" inputmode="numeric" aria-label="Target file size in kilobytes" style="width:90px">

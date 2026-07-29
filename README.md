@@ -15,6 +15,11 @@ A beautiful, **fully client-side** image SaaS — crop, resize the canvas, compr
 - GIFs are flattened to their first frame for editing; SVGs are rasterised at high resolution so crops stay sharp
 - Exports **PNG (lossless)**, **JPG** and **WebP**
 
+### 📏 Resize-first for exams & forms (default)
+- Right below the image, tick between **Resize** (default) and **Crop** (optional, manual)
+- Resize mode scales the whole photo to an exact size (e.g. **120 × 150 px under 50 KB**) with one-click presets, a KB limit, and a fit strategy (auto-trim centre / pad with white / stretch) — no cropping required
+- Cropping is a secondary feature: tick **✂️ Crop** to select an area manually
+
 ### Crop & aspect ratio
 - Preset ratios (Free, 1:1, 4:5, 3:4, 4:3, 3:2, 16:9, 9:16, 21:9, 2:3) + **custom W:H**
 - Numeric width / height / offset inputs in **px, %, in, cm, mm** with a configurable **DPI**
